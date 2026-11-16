@@ -1,0 +1,52 @@
+name: build
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -S . -B build -A x64
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Prepare package
+        shell: pwsh
+        run: |
+          Copy-Item install.bat build/package/install.bat
+          Copy-Item README.md build/package/README.md
+          Get-ChildItem -Recurse build/package | Select-Object FullName
+
+      # Готовая папка (GitHub отдаёт artifact одним zip — скачивается и распаковывается браузером)
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSRMods
+          path: build/package
+
+      # Релиз: отдельные .dll без архива + готовый zip с install.bat
+      - name: Make zip
+        shell: pwsh
+        run: Compress-Archive -Path build/package/* -DestinationPath DSRMods.zip -Force
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: Build ${{ github.run_number }}
+          files: |
+            DSRMods.zip
+            build/package/dinput8.dll
+            build/package/DSRMods/DSRMap.dll
+            build/package/DSRMods/DSROptimize.dll
+            build/package/install.bat
