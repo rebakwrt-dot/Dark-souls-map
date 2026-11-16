@@ -41,6 +41,11 @@ jobs:
         shell: pwsh
         run: cmake --build "$env:GITHUB_WORKSPACE/out" --config Release
 
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
       - name: Build extractor (dotnet)
         shell: pwsh
         run: |
