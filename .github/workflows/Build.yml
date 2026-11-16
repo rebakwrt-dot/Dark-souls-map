@@ -41,11 +41,20 @@ jobs:
         shell: pwsh
         run: cmake --build "$env:GITHUB_WORKSPACE/out" --config Release
 
+      - name: Build extractor (dotnet)
+        shell: pwsh
+        run: |
+          if (Test-Path "$env:PROJ/tools/Extractor/DSRExtract.csproj") {
+            dotnet publish "$env:PROJ/tools/Extractor/DSRExtract.csproj" -c Release -r win-x64 --self-contained true `
+              -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o "$env:GITHUB_WORKSPACE/out/package/tools"
+          }
+
       - name: Prepare package
         shell: pwsh
         run: |
           $pkg = "$env:GITHUB_WORKSPACE/out/package"
           Copy-Item "$env:PROJ/install.bat" $pkg -ErrorAction SilentlyContinue
+          Copy-Item "$env:PROJ/extract.bat" $pkg -ErrorAction SilentlyContinue
           Copy-Item "$env:PROJ/README.md" $pkg -ErrorAction SilentlyContinue
           Get-ChildItem -Recurse $pkg | Select-Object FullName
 
@@ -70,3 +79,5 @@ jobs:
             out/package/DSRMods/DSRMap.dll
             out/package/DSRMods/DSROptimize.dll
             out/package/install.bat
+            out/package/extract.bat
+            out/package/tools/DSRExtract.exe
