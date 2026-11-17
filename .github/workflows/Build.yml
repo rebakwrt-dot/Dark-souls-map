@@ -14,22 +14,30 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Распаковываем zip(ы) из корня репозитория и ищем CMakeLists.txt
+      # Распаковываем ZIP-архивы из корня репозитория и ищем CMakeLists.txt
       - name: Unpack and locate project
         shell: pwsh
         run: |
           $src = Join-Path $env:GITHUB_WORKSPACE "_src"
           New-Item -ItemType Directory -Force $src | Out-Null
-          Get-ChildItem -Path $env:GITHUB_WORKSPACE -Filter *.zip -File | ForEach-Object {
-            Write-Host "Распаковка: $($_.Name)"
-            Expand-Archive -LiteralPath $_.FullName -DestinationPath $src -Force
-          }
+
+          Get-ChildItem -Path $env:GITHUB_WORKSPACE -Filter *.zip -File |
+            ForEach-Object {
+              Write-Host "Распаковка: $($_.Name)"
+              Expand-Archive -LiteralPath $_.FullName -DestinationPath $src -Force
+            }
+
           $f = Get-ChildItem -Path $env:GITHUB_WORKSPACE -Recurse -Filter CMakeLists.txt -File |
-               Where-Object { $_.FullName -notmatch '[\\/](_deps|out)[\\/]' } | Select-Object -First 1
+               Where-Object { $_.FullName -notmatch '[\\/](_deps|out)[\\/]' } |
+               Select-Object -First 1
+
           if (-not $f) {
-            Get-ChildItem -Recurse $env:GITHUB_WORKSPACE | Where-Object { $_.FullName -notmatch '[\\/]\.git[\\/]' } | Select-Object FullName
-            throw "CMakeLists.txt не найден ни в репозитории, ни внутри zip"
+            Get-ChildItem -Recurse $env:GITHUB_WORKSPACE |
+              Where-Object { $_.FullName -notmatch '[\\/]\.git[\\/]' } |
+              Select-Object FullName
+            throw "CMakeLists.txt не найден ни в репозитории, ни внутри ZIP"
           }
+
           "PROJ=$($f.DirectoryName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           Write-Host "Проект: $($f.DirectoryName)"
 
@@ -51,21 +59,30 @@ jobs:
         run: |
           if (Test-Path "$env:PROJ/tools/Extractor/DSRExtract.csproj") {
             dotnet publish "$env:PROJ/tools/Extractor/DSRExtract.csproj" -c Release -r win-x64 --self-contained true `
-              -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o "$env:GITHUB_WORKSPACE/out/package/tools"
+              -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
+              -o "$env:GITHUB_WORKSPACE/out/package/tools"
+          } else {
+            Write-Host "DSRExtract.csproj не найден — пропускаем сборку Extractor"
           }
 
       - name: Prepare package
         shell: pwsh
         run: |
           $pkg = "$env:GITHUB_WORKSPACE/out/package"
+          New-Item -ItemType Directory -Force $pkg | Out-Null
+
           Copy-Item "$env:PROJ/install.bat" $pkg -ErrorAction SilentlyContinue
           Copy-Item "$env:PROJ/extract.bat" $pkg -ErrorAction SilentlyContinue
+          Copy-Item "$env:PROJ/markers.example.json" $pkg -ErrorAction SilentlyContinue
           Copy-Item "$env:PROJ/README.md" $pkg -ErrorAction SilentlyContinue
+
           Get-ChildItem -Recurse $pkg | Select-Object FullName
 
       - name: Make zip
         shell: pwsh
-        run: Compress-Archive -Path out/package/* -DestinationPath DSRMods.zip -Force
+        run: |
+          if (Test-Path "DSRMods.zip") { Remove-Item "DSRMods.zip" -Force }
+          Compress-Archive -Path "out/package/*" -DestinationPath "DSRMods.zip" -Force
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -83,6 +100,8 @@ jobs:
             out/package/dinput8.dll
             out/package/DSRMods/DSRMap.dll
             out/package/DSRMods/DSROptimize.dll
+            out/package/DSRMods/DSRCombat.dll
             out/package/install.bat
             out/package/extract.bat
+            out/package/markers.example.json
             out/package/tools/DSRExtract.exe
